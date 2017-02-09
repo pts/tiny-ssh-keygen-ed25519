@@ -1,5 +1,5 @@
-tiny-ssh-keygen-ed25519: ssh-keygen for ed25519 keypairs in standard C
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tiny-ssh-keygen-ed25519: tiny ssh-keygen for ed25519 keypairs in standard C
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 tiny-ssh-keygen-ed25519 is a command-line tool implemented in standard C for
 generating unencrypted ed25519 keypairs (public and private keys) to be used
 with OpenSSH.
