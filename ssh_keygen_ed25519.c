@@ -1,9 +1,28 @@
-/* by pts@fazekas.hu at Thu Jan 26 15:04:16 CET 2017
- * ... Thu Feb  9 12:22:55 CET 2017
+/* 
+ * by pts@fazekas.hu at Thu Feb  9 12:22:55 CET 2017
+ * started at Thu Jan 26 15:04:16 CET 2017
  *
- * gcc -s -O2 -W -Wall -Wextra -Werror -o tgen.dynamic tgen.c
- * i686-w64-mingw32-gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen.exe tgen.c
- * xtiny gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen tgen.c
+ * tiny-ssh-keygen-ed25519 is a command-line tool implemented in standard C for
+ * generating unencrypted ed25519 keypairs (public and private keys) to be
+ * used with OpenSSH.
+ *
+ * tiny-ssh-keygen-ed25519 is a self-contaned implementation optimized for
+ * executable file size. It contains ed25519 elliptic curve crypto code
+ * (taken from tweetnacl), an SHA-512 checksum (also taken from tweetnacl),
+ * a Base64 encoder and some glue code to generate in the proper file format,
+ * to parse to command-line flags and to write the result to file.
+ *
+ * Usage for keypair generation (as a replacement for ssh-keygen):
+ *
+ *   ./ssh_keygen_ed25519 -t ed25519 -f <output-file> [-C <comment>]
+ *
+ * Compile with any of:
+ *
+ * * make
+ * * gcc -s -Os -ansi -pedantic -W -Wall -Wextra -Werror -o ssh_keygen_ed25519.dynamic ssh_keygen_ed25519.c
+ * * i686-w64-mingw32-gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o ssh_keygen_ed25519.exe ssh_keygen_ed25519.c
+ * * xtiny gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o ssh_keygen_ed25519 ssh_keygen_ed25519.c
+ * * You can also use g++ instead of gcc, this is also a valid C++ program.
  */
 
 #if __XTINY__
@@ -313,6 +332,7 @@ static void scalarbase(gf p[4],const u8 *s) {
 static void keypair(unsigned char *pk, const unsigned char *sk) {
   u8 h[64];
   gf p[4];
+  /* SHA-512 with 64 bytes of output in h, only the first 32 bytes are used. */
   crypto_hash(h, sk, 32);
   h[0] &= 248;
   h[31] &= 63;
@@ -412,14 +432,23 @@ static void write_to_file(
 }
 
 static const char c_kprefix[62] =
+#if 0
     "openssh-key-v1\0\0\0\0\4none\0\0\0\4none\0\0\0\0\0\0\0\1\0\0\0\x33"
     "\0\0\0\x0bssh-ed25519\0\0\0 ";  /* 19 bytes in this line. */
+#else  /* Avoid g++ warning: initializer-string for array of chars is too long. */
+    {'o','p','e','n','s','s','h','-','k','e','y','-','v','1','\0','\0','\0','\0','\4','n','o','n','e','\0','\0','\0','\4','n','o','n','e','\0','\0','\0','\0','\0','\0','\0','\1','\0','\0','\0','\x33','\0','\0','\0','\x0b','s','s','h','-','e','d','2','5','5','1','9','\0','\0','\0',' '};
+#endif
 
 static char *build_openssh_public_key_ed25519(
    char *p, char *pend, const u8 *public_key,
    const char *comment, u32 comment_size) {
   u8 ubuf[19 + 32];
-  static const char eprefix[12] = "ssh-ed25519 ";
+  static const char eprefix[12] =
+#if 0
+      "ssh-ed25519 ";
+#else
+      {'s','s','h','-','e','d','2','5','5','1','9',' '};
+#endif
   static const char newline[1] = {'\n'};
   memcpy(ubuf, c_kprefix + 62 - 19, 19);
   memcpy(ubuf + 19, public_key, 32);
@@ -465,10 +494,20 @@ static char *build_openssh_private_key_ed25519(
    char *p, char *pend, const u8 *public_key,
    const char *comment, u32 comment_size,
    const u8 *private_key, const u8 *checkstr) {
-  __attribute__((aligned(1))) static const char c_begin[36] = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
-  /* TODO(pts): Why is a \0 byte inserted between c_begin and c_end? */
-  __attribute__((aligned(1))) static const char c_end[34] = "-----END OPENSSH PRIVATE KEY-----\n";
-  __attribute__((aligned(1))) static const char c_pad7[7] = "\1\2\3\4\5\6\7";
+  __attribute__((aligned(1))) static const char c_begin[36] =
+#if 0
+      "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+#else
+      {'-','-','-','-','-','B','E','G','I','N',' ','O','P','E','N','S','S','H',' ','P','R','I','V','A','T','E',' ','K','E','Y','-','-','-','-','-','\n'};
+#endif
+  /* There is \0 byte inserted between c_begin and c_end unless {'.',...} */
+  __attribute__((aligned(1))) static const char c_end[34] =
+#if 0
+      "-----END OPENSSH PRIVATE KEY-----\n";
+#else
+      {'-','-','-','-','-','E','N','D',' ','O','P','E','N','S','S','H',' ','P','R','I','V','A','T','E',' ','K','E','Y','-','-','-','-','-','\n'};
+#endif
+  __attribute__((aligned(1))) static const char c_pad7[7] = {1,2,3,4,5,6,7};
   /* Buffer size needed in data: 236 + comment_size bytes. */
   char data[236 + MAX_COMMENT_SIZE], *origp, *dpend = data + sizeof data;
   u32 data_size;
