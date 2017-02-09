@@ -1,0 +1,4 @@
+*~
+*.o
+core
+ssh_keygen_ed25519
