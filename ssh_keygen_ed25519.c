@@ -30,12 +30,7 @@ typedef uint64_t u64;
 typedef int64_t i64;
 typedef i64 gf[16];
 
-/* Should be ={1}, but that consumes about 127 bytes more than necessary in
- * the executable; initialized in main().
- */
-static gf gf1;
 static const gf
-  gf0,
   D2 = {0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406},
   X = {0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169},
   Y = {0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666};
@@ -283,10 +278,14 @@ static void pack(u8 *r,gf p[4]) {
 
 static void scalarmult(gf p[4],gf q[4],const u8 *s) {
   int i;
-  set25519(p[0],gf0);
-  set25519(p[1],gf1);
-  set25519(p[2],gf1);
-  set25519(p[3],gf0);
+  memset(p, 0, 128 * 4);
+#if defined(__i386__) || defined(__amd64__)
+  *(char*)(&p[1][0]) |= 1;  /* gcc-4.8.4 is not smart enough to optimize this. */
+  *(char*)(&p[2][0]) |= 1;
+#else
+  p[1][0] |= 1;
+  p[2][0] |= 1;
+#endif
   for (i = 255;i >= 0;--i) {
     u8 b = (s[i/8]>>(i&7))&1;
     cswap(p,q,b);
@@ -300,7 +299,11 @@ static void scalarbase(gf p[4],const u8 *s) {
   gf q[4];
   set25519(q[0],X);
   set25519(q[1],Y);
-  set25519(q[2],gf1);
+#if defined(__i386__) || defined(__amd64__)
+  *(char*)(&q[2][0]) |= 1;  /* gcc-4.8.4 is not smart enough to optimize this. */
+#else
+  q[2][0] |= 1;
+#endif
   M(q[3],X,Y);
   scalarmult(p,q,s);
 }
@@ -417,7 +420,7 @@ static char *build_openssh_public_key_ed25519(
    const char *comment, u32 comment_size) {
   u8 ubuf[19 + 32];
   static const char eprefix[12] = "ssh-ed25519 ";
-  static const char newline[1] = "\n";
+  static const char newline[1] = {'\n'};
   memcpy(ubuf, c_kprefix + 62 - 19, 19);
   memcpy(ubuf + 19, public_key, 32);
   p = append(p, pend, eprefix, 12);
@@ -541,12 +544,6 @@ int main(int argc, char **argv) {
   const char *filename = NULL;
   const char *comment = "key";
   const char *key_type = NULL;
-
-#ifdef __i386__
-  *(char*)(gf1) |= 1;  /* gcc-4.8.4 is not smart enough to optimize this. */
-#else
-  gf1[0] |= 1;
-#endif
 
   (void)argc;
   for (argi = argv + 1; *argi; ++argi) {
