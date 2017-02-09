@@ -8,7 +8,7 @@
  *
  * tiny-ssh-keygen-ed25519 is a self-contaned implementation optimized for
  * executable file size. It contains ed25519 elliptic curve crypto code
- * (taken from tweetnacl), an SHA-512 checksum (also taken from tweetnacl),
+ * (taken from TweetNaCl), an SHA-512 checksum (also taken from TweetNaCl),
  * a Base64 encoder and some glue code to generate in the proper file format,
  * to parse to command-line flags and to write the result to file.
  *
@@ -39,7 +39,7 @@
 #define O_BINARY 0
 #endif
 
-/* --- ed25519 crypto based on tweetnacl.c 20140427 */
+/* --- ed25519 crypto based on TweetNaCl tweetnacl.c 20140427 */
 
 #define FOR(i,n) for (i = 0;i < n;++i)
 
