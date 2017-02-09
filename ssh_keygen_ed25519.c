@@ -1,15 +1,23 @@
 /* by pts@fazekas.hu at Thu Jan 26 15:04:16 CET 2017
  * ... Thu Feb  9 12:22:55 CET 2017
  *
- * gcc -W -Wall -Wextra -Werror -ffunction-sections -fdata-sections -Os -o tgen tgen.c
+ * i686-w64-mingw32-gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen.exe tgen.c -I. -Wno-long-long -Wno-overlength-strings
+ * xtiny gcc -W -Wall -Wextra -Werror -Os -o tgen tgen.c
+ * xtiny gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen tgen.c -I. -Wno-unused-function -Wno-long-long -Wno-overlength-strings
  */
 
 #if __XTINY__
 #include <xtiny.h>
 #else
+#include <fcntl.h>  /* open() */
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#endif
+
+#ifndef O_BINARY  /* WIN32 defines O_BINARY. */
+#define O_BINARY 0
 #endif
 
 /* --- ed25519 crypto based on tweetnacl.c 20140427 */
@@ -61,7 +69,7 @@ static void car25519(gf o) {
   int i;
   i64 c;
   FOR(i,16) {
-    o[i]+=(1LL<<16);
+    o[i]+=1<<16;
     c=o[i]>>16;
     o[(i+1)*(i<15)]+=c-1+37*(c-1)*(i==15);
     o[i]-=c<<16;
@@ -150,27 +158,30 @@ static u64 Sigma1(u64 x) { return R(x,14) ^ R(x,18) ^ R(x,41); }
 static u64 sigma0(u64 x) { return R(x, 1) ^ R(x, 8) ^ (x >> 7); }
 static u64 sigma1(u64 x) { return R(x,19) ^ R(x,61) ^ (x >> 6); }
 
+/* ...ULL constant without triggering gcc -Wlong-long */
+#define ULLC(hi, lo) (((u64)(hi)) << 32 | (lo))
+
 static const u64 K[80] =  {
-  0x428a2f98d728ae22ULL, 0x7137449123ef65cdULL, 0xb5c0fbcfec4d3b2fULL, 0xe9b5dba58189dbbcULL,
-  0x3956c25bf348b538ULL, 0x59f111f1b605d019ULL, 0x923f82a4af194f9bULL, 0xab1c5ed5da6d8118ULL,
-  0xd807aa98a3030242ULL, 0x12835b0145706fbeULL, 0x243185be4ee4b28cULL, 0x550c7dc3d5ffb4e2ULL,
-  0x72be5d74f27b896fULL, 0x80deb1fe3b1696b1ULL, 0x9bdc06a725c71235ULL, 0xc19bf174cf692694ULL,
-  0xe49b69c19ef14ad2ULL, 0xefbe4786384f25e3ULL, 0x0fc19dc68b8cd5b5ULL, 0x240ca1cc77ac9c65ULL,
-  0x2de92c6f592b0275ULL, 0x4a7484aa6ea6e483ULL, 0x5cb0a9dcbd41fbd4ULL, 0x76f988da831153b5ULL,
-  0x983e5152ee66dfabULL, 0xa831c66d2db43210ULL, 0xb00327c898fb213fULL, 0xbf597fc7beef0ee4ULL,
-  0xc6e00bf33da88fc2ULL, 0xd5a79147930aa725ULL, 0x06ca6351e003826fULL, 0x142929670a0e6e70ULL,
-  0x27b70a8546d22ffcULL, 0x2e1b21385c26c926ULL, 0x4d2c6dfc5ac42aedULL, 0x53380d139d95b3dfULL,
-  0x650a73548baf63deULL, 0x766a0abb3c77b2a8ULL, 0x81c2c92e47edaee6ULL, 0x92722c851482353bULL,
-  0xa2bfe8a14cf10364ULL, 0xa81a664bbc423001ULL, 0xc24b8b70d0f89791ULL, 0xc76c51a30654be30ULL,
-  0xd192e819d6ef5218ULL, 0xd69906245565a910ULL, 0xf40e35855771202aULL, 0x106aa07032bbd1b8ULL,
-  0x19a4c116b8d2d0c8ULL, 0x1e376c085141ab53ULL, 0x2748774cdf8eeb99ULL, 0x34b0bcb5e19b48a8ULL,
-  0x391c0cb3c5c95a63ULL, 0x4ed8aa4ae3418acbULL, 0x5b9cca4f7763e373ULL, 0x682e6ff3d6b2b8a3ULL,
-  0x748f82ee5defb2fcULL, 0x78a5636f43172f60ULL, 0x84c87814a1f0ab72ULL, 0x8cc702081a6439ecULL,
-  0x90befffa23631e28ULL, 0xa4506cebde82bde9ULL, 0xbef9a3f7b2c67915ULL, 0xc67178f2e372532bULL,
-  0xca273eceea26619cULL, 0xd186b8c721c0c207ULL, 0xeada7dd6cde0eb1eULL, 0xf57d4f7fee6ed178ULL,
-  0x06f067aa72176fbaULL, 0x0a637dc5a2c898a6ULL, 0x113f9804bef90daeULL, 0x1b710b35131c471bULL,
-  0x28db77f523047d84ULL, 0x32caab7b40c72493ULL, 0x3c9ebe0a15c9bebcULL, 0x431d67c49c100d4cULL,
-  0x4cc5d4becb3e42b6ULL, 0x597f299cfc657e2aULL, 0x5fcb6fab3ad6faecULL, 0x6c44198c4a475817ULL
+    ULLC(0x428a2f98U,0xd728ae22U), ULLC(0x71374491U,0x23ef65cdU), ULLC(0xb5c0fbcfU,0xec4d3b2fU), ULLC(0xe9b5dba5U,0x8189dbbcU),
+    ULLC(0x3956c25bU,0xf348b538U), ULLC(0x59f111f1U,0xb605d019U), ULLC(0x923f82a4U,0xaf194f9bU), ULLC(0xab1c5ed5U,0xda6d8118U),
+    ULLC(0xd807aa98U,0xa3030242U), ULLC(0x12835b01U,0x45706fbeU), ULLC(0x243185beU,0x4ee4b28cU), ULLC(0x550c7dc3U,0xd5ffb4e2U),
+    ULLC(0x72be5d74U,0xf27b896fU), ULLC(0x80deb1feU,0x3b1696b1U), ULLC(0x9bdc06a7U,0x25c71235U), ULLC(0xc19bf174U,0xcf692694U),
+    ULLC(0xe49b69c1U,0x9ef14ad2U), ULLC(0xefbe4786U,0x384f25e3U), ULLC(0x0fc19dc6U,0x8b8cd5b5U), ULLC(0x240ca1ccU,0x77ac9c65U),
+    ULLC(0x2de92c6fU,0x592b0275U), ULLC(0x4a7484aaU,0x6ea6e483U), ULLC(0x5cb0a9dcU,0xbd41fbd4U), ULLC(0x76f988daU,0x831153b5U),
+    ULLC(0x983e5152U,0xee66dfabU), ULLC(0xa831c66dU,0x2db43210U), ULLC(0xb00327c8U,0x98fb213fU), ULLC(0xbf597fc7U,0xbeef0ee4U),
+    ULLC(0xc6e00bf3U,0x3da88fc2U), ULLC(0xd5a79147U,0x930aa725U), ULLC(0x06ca6351U,0xe003826fU), ULLC(0x14292967U,0x0a0e6e70U),
+    ULLC(0x27b70a85U,0x46d22ffcU), ULLC(0x2e1b2138U,0x5c26c926U), ULLC(0x4d2c6dfcU,0x5ac42aedU), ULLC(0x53380d13U,0x9d95b3dfU),
+    ULLC(0x650a7354U,0x8baf63deU), ULLC(0x766a0abbU,0x3c77b2a8U), ULLC(0x81c2c92eU,0x47edaee6U), ULLC(0x92722c85U,0x1482353bU),
+    ULLC(0xa2bfe8a1U,0x4cf10364U), ULLC(0xa81a664bU,0xbc423001U), ULLC(0xc24b8b70U,0xd0f89791U), ULLC(0xc76c51a3U,0x0654be30U),
+    ULLC(0xd192e819U,0xd6ef5218U), ULLC(0xd6990624U,0x5565a910U), ULLC(0xf40e3585U,0x5771202aU), ULLC(0x106aa070U,0x32bbd1b8U),
+    ULLC(0x19a4c116U,0xb8d2d0c8U), ULLC(0x1e376c08U,0x5141ab53U), ULLC(0x2748774cU,0xdf8eeb99U), ULLC(0x34b0bcb5U,0xe19b48a8U),
+    ULLC(0x391c0cb3U,0xc5c95a63U), ULLC(0x4ed8aa4aU,0xe3418acbU), ULLC(0x5b9cca4fU,0x7763e373U), ULLC(0x682e6ff3U,0xd6b2b8a3U),
+    ULLC(0x748f82eeU,0x5defb2fcU), ULLC(0x78a5636fU,0x43172f60U), ULLC(0x84c87814U,0xa1f0ab72U), ULLC(0x8cc70208U,0x1a6439ecU),
+    ULLC(0x90befffaU,0x23631e28U), ULLC(0xa4506cebU,0xde82bde9U), ULLC(0xbef9a3f7U,0xb2c67915U), ULLC(0xc67178f2U,0xe372532bU),
+    ULLC(0xca273eceU,0xea26619cU), ULLC(0xd186b8c7U,0x21c0c207U), ULLC(0xeada7dd6U,0xcde0eb1eU), ULLC(0xf57d4f7fU,0xee6ed178U),
+    ULLC(0x06f067aaU,0x72176fbaU), ULLC(0x0a637dc5U,0xa2c898a6U), ULLC(0x113f9804U,0xbef90daeU), ULLC(0x1b710b35U,0x131c471bU),
+    ULLC(0x28db77f5U,0x23047d84U), ULLC(0x32caab7bU,0x40c72493U), ULLC(0x3c9ebe0aU,0x15c9bebcU), ULLC(0x431d67c4U,0x9c100d4cU),
+    ULLC(0x4cc5d4beU,0xcb3e42b6U), ULLC(0x597f299cU,0xfc657e2aU), ULLC(0x5fcb6fabU,0x3ad6faecU), ULLC(0x6c44198cU,0x4a475817U),
 };
 
 static int crypto_hashblocks(u8 *x,const u8 *m,u64 n) {
@@ -205,15 +216,15 @@ static int crypto_hashblocks(u8 *x,const u8 *m,u64 n) {
 }
 
 static const u8 iv[64] = {
-  0x6a,0x09,0xe6,0x67,0xf3,0xbc,0xc9,0x08,
-  0xbb,0x67,0xae,0x85,0x84,0xca,0xa7,0x3b,
-  0x3c,0x6e,0xf3,0x72,0xfe,0x94,0xf8,0x2b,
-  0xa5,0x4f,0xf5,0x3a,0x5f,0x1d,0x36,0xf1,
-  0x51,0x0e,0x52,0x7f,0xad,0xe6,0x82,0xd1,
-  0x9b,0x05,0x68,0x8c,0x2b,0x3e,0x6c,0x1f,
-  0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
-  0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79
-} ;
+    0x6a,0x09,0xe6,0x67,0xf3,0xbc,0xc9,0x08,
+    0xbb,0x67,0xae,0x85,0x84,0xca,0xa7,0x3b,
+    0x3c,0x6e,0xf3,0x72,0xfe,0x94,0xf8,0x2b,
+    0xa5,0x4f,0xf5,0x3a,0x5f,0x1d,0x36,0xf1,
+    0x51,0x0e,0x52,0x7f,0xad,0xe6,0x82,0xd1,
+    0x9b,0x05,0x68,0x8c,0x2b,0x3e,0x6c,0x1f,
+    0x1f,0x83,0xd9,0xab,0xfb,0x41,0xbd,0x6b,
+    0x5b,0xe0,0xcd,0x19,0x13,0x7e,0x21,0x79,
+};
 
 static int crypto_hash(u8 *out,const u8 *m,u64 n) {
   u8 h[64],x[256];
@@ -323,7 +334,21 @@ __attribute__((noreturn)) static void fatal(const char *msg) {
   exit(2);
 }
 
-static void randombytes(u8 *a, u32 size) {
+#ifdef WIN32  /* Based on: http://stackoverflow.com/a/41639582/97248 */
+#include <wincrypt.h> /* CryptAcquireContext(), CryptGenRandom() */
+static void generate_random_bytes(u8 *a, u32 size) {
+int RandBytes(void* const a, const size_t byte_len) {
+  HCRYPTPROV p;
+  ULONG i;
+  if (!CryptAcquireContext(&p, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+    fatal("error in CryptAcquireContext");
+  }
+  if (!CryptGenRandom(p, size, (BYTE*)a)) fatal("error in CryptGenRandom");
+  CryptReleaseContext(p, 0);
+  return 0;
+}
+#else /* Linux, macOS, FreeBsd */
+static void generate_random_bytes(u8 *a, u32 size) {
   int fd = open("/dev/urandom", O_RDONLY, 0);
   int got;
   if (fd < 0) fatal("open urandom");
@@ -331,11 +356,21 @@ static void randombytes(u8 *a, u32 size) {
   if (got <= 0 || got + 0U != size) fatal("read urandom");
   close(fd);
 }
+#endif
 
 static char *append(char *p, char *pend, const char *input, u32 input_size) {
   if (input_size > pend - p + 0U) fatal("append too long");
   memcpy(p, input, input_size);
   return p + input_size;
+}
+
+static char *add_u32be(char *p, char *pend, u32 v) {
+  if (4 > pend - p + 0U) fatal("add_u32be too long");
+  *p++ = v >> 24;
+  *p++ = v >> 16;
+  *p++ = v >> 8;
+  *p++ = v;
+  return p;
 }
 
 static const char b64chars[] =
@@ -374,7 +409,7 @@ static char *base64encode(
 
 static void write_to_file(
     const char *filename, unsigned mode, const char *p, u32 size) {
-  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, mode);
+  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, mode);
   int got;
   if (fd < 0) fatal("file open for write");
   got = write(fd, p, size);
@@ -382,14 +417,17 @@ static void write_to_file(
   close(fd);
 }
 
+static const char c_kprefix[62] =
+    "openssh-key-v1\0\0\0\0\4none\0\0\0\4none\0\0\0\0\0\0\0\1\0\0\0\x33"
+    "\0\0\0\x0bssh-ed25519\0\0\0 ";  /* 19 bytes in this line. */
+
 static char *build_openssh_public_key_ed25519(
    char *p, char *pend, const u8 *public_key,
    const char *comment, u32 comment_size) {
   u8 ubuf[19 + 32];
-  static const char prefix[19] = "\0\0\0\x0bssh-ed25519\0\0\0 ";
   static const char eprefix[12] = "ssh-ed25519 ";
   static const char newline[1] = "\n";
-  memcpy(ubuf, prefix, 19);
+  memcpy(ubuf, c_kprefix + 62 - 19, 19);
   memcpy(ubuf + 19, public_key, 32);
   p = append(p, pend, eprefix, 12);
   p = base64encode(p, pend, ubuf, 19 + 32);
@@ -399,61 +437,77 @@ static char *build_openssh_public_key_ed25519(
   return p;
 }
 
+/* Input: [p, p + size).
+ * Output [p, p + size + (size + line_size - 1) / line_size), always with a
+ *        trailing newline.
+ */
+static char *split_lines(char *p, char *pend, u32 size, u32 line_size) {
+  const u32 d = (size + line_size - 1) / line_size;
+  char *q, *r, *psize;
+  u32 i;
+  if (size + d > pend - p + 0U) {
+    fatal("split_lines too long");
+  }
+  for (i = size; i-- > 0;) {
+    p[i + d] = p[i];
+  }
+  q = p + d;
+  r = p + line_size;
+  psize = q + size - 1;
+  while (p != psize) {
+    if (p == r) {
+      *p++ = '\n';
+      r = p + line_size;
+    }
+    *p++ = *q++;
+  }
+  *p++ = '\n';
+  return p;
+}
+
+#define MAX_COMMENT_SIZE 1024
+
 static char *build_openssh_private_key_ed25519(
    char *p, char *pend, const u8 *public_key,
    const char *comment, u32 comment_size,
    const u8 *private_key, const u8 *checkstr) {
   static const char c_begin[36] = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
   static const char c_end[34] = "-----END OPENSSH PRIVATE KEY-----\n";
-  static const char c_kprefix[62] = "openssh-key-v1\0\0\0\0\4none\0\0\0\4none\0\0\0\0\0\0\0\1\0\0\0\x33\0\0\0\x0bssh-ed25519\0\0\0 ";
-  /* !! smaller size for data */
-  char data[4096], *origp, *dpend = data + sizeof data;
+  static const char c_pad7[7] = "\1\2\3\4\5\6\7";
+  /* Buffer size needed in data: 236 + comment_size bytes. */
+  char data[236 + MAX_COMMENT_SIZE], *origp, *dpend = data + sizeof data;
   u32 data_size;
+  const u32 pad_size = -(comment_size + 3) & 7;
   origp = p;
   p = data;
   p = append(p, dpend, c_kprefix, 62);
   p = append(p, dpend, (const char*)public_key, 32);
-  data_size = p - data;  /* TODO(pts): Check for overflow. */
-
-#if 0
-  ++ struct.pack(">L", 131 + len(comment) + (-(len(comment) + 3) & 7)),
-#endif
+  p = add_u32be(p, dpend, 131 + comment_size + pad_size);
   p = append(p, dpend, (const char*)checkstr, 4);
   p = append(p, dpend, (const char*)checkstr, 4);
-#if 0
-      "\0\0\0\x0bssh-ed25519\0\0\0 ",
-#endif
+  p = append(p, dpend, c_kprefix + 62 - 19, 19);
   p = append(p, dpend, (const char*)public_key, 32);
-#if 0
-      "\0\0\0@",
-#endif
+  p = add_u32be(p, dpend, 64);
   p = append(p, dpend, (const char*)private_key, 32);
   p = append(p, dpend, (const char*)public_key, 32);
-#if 0
-      struct.pack(">L", len(comment)),
-#endif
+  p = add_u32be(p, dpend, comment_size);
   p = append(p, dpend, comment, comment_size);
-#if 0
-      "\1\2\3\4\5\6\7"[:-(len(comment) + 3) & 7]
-#endif
+  p = append(p, dpend, c_pad7, pad_size);
+  data_size = p - data;
 
-  /* !! apply line length 70 */
   p = origp;
   p = append(p, pend, c_begin, 36);
+  origp = p;
   p = base64encode(p, pend, (const u8*)data, data_size);
+  p = split_lines(origp, pend, p - origp, 70);
   p = append(p, pend, c_end, 34);
-#if 0
-  for i in xrange(0, len(data), 70):
-    output.append(data[i : i + 70])
-    output.append("\n")
-#endif
   return p;
 }
 
 int main(int argc, char **argv) {
-  /* !! chmod */
   u8 rnd36[36], public_key[32];
-  char buf[4096], *p, *pend = buf + sizeof buf;
+  /* Buffer size needed: <= 400 + comment_size * 142 / 105 bytes. */
+  char buf[401 + MAX_COMMENT_SIZE + MAX_COMMENT_SIZE / 3 + MAX_COMMENT_SIZE * 2 / 105], *p, *pend = buf + sizeof buf;
   static const char comment[1025] = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello,  World!";
   u32 comment_size;  /* TODO(pts): Check for overflow */
   static const char filename[] = "id_t1";
@@ -465,7 +519,7 @@ int main(int argc, char **argv) {
       memchr(comment, '\r', comment_size)) {
     fatal("comment contains newline");
   }
-  randombytes(rnd36, 36);
+  generate_random_bytes(rnd36, 36);
   memcpy(rnd36, "xyztxyztxyztxyztxyztxyztxyztxyztCKst", 36);  /* !! */
   keypair(public_key, rnd36);
   p = buf;
@@ -475,7 +529,7 @@ int main(int argc, char **argv) {
   p = buf;
   p = build_openssh_private_key_ed25519(
       p, pend, public_key, comment, comment_size,
-      rnd36 /* private_key */, rnd36 + 4 /* checkstr */);
+      rnd36 /* private_key */, rnd36 + 32 /* checkstr */);
   write_to_file(filename, 0600, buf, p - buf);
   return 0;
 }
