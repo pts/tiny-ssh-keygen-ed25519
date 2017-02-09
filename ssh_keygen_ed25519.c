@@ -1,9 +1,9 @@
 /* by pts@fazekas.hu at Thu Jan 26 15:04:16 CET 2017
  * ... Thu Feb  9 12:22:55 CET 2017
  *
- * i686-w64-mingw32-gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen.exe tgen.c -I. -Wno-long-long -Wno-overlength-strings
- * xtiny gcc -W -Wall -Wextra -Werror -Os -o tgen tgen.c
- * xtiny gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen tgen.c -I. -Wno-unused-function -Wno-long-long -Wno-overlength-strings
+ * gcc -s -O2 -W -Wall -Wextra -Werror -o tgen.dynamic tgen.c
+ * i686-w64-mingw32-gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen.exe tgen.c
+ * xtiny gcc -ansi -pedantic -W -Wall -Wextra -Werror -s -Os -o tgen tgen.c
  */
 
 #if __XTINY__
@@ -30,18 +30,15 @@ typedef uint64_t u64;
 typedef int64_t i64;
 typedef i64 gf[16];
 
-static const u8
-  _0[16],
-  _9[32] = {9};
+/* Should be ={1}, but that consumes about 127 bytes more than necessary in
+ * the executable; initialized in main().
+ */
+static gf gf1;
 static const gf
   gf0,
-  gf1 = {1},
-  _121665 = {0xDB41,1},
-  D = {0x78a3, 0x1359, 0x4dca, 0x75eb, 0xd8ab, 0x4141, 0x0a4d, 0x0070, 0xe898, 0x7779, 0x4079, 0x8cc7, 0xfe73, 0x2b6f, 0x6cee, 0x5203},
   D2 = {0xf159, 0x26b2, 0x9b94, 0xebd6, 0xb156, 0x8283, 0x149a, 0x00e0, 0xd130, 0xeef3, 0x80f2, 0x198e, 0xfce7, 0x56df, 0xd9dc, 0x2406},
   X = {0xd51a, 0x8f25, 0x2d60, 0xc956, 0xa7b2, 0x9525, 0xc760, 0x692c, 0xdc5c, 0xfdd6, 0xe231, 0xc0a4, 0x53fe, 0xcd6e, 0x36d3, 0x2169},
-  Y = {0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666},
-  I = {0xa0b0, 0x4a0e, 0x1b27, 0xc4ee, 0xe478, 0xad2f, 0x1806, 0x2f43, 0xd7a7, 0x3dfb, 0x0099, 0x2b4d, 0xdf0b, 0x4fc1, 0x2480, 0x2b83};
+  Y = {0x6658, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666, 0x6666};
 
 static u64 dl64(const u8 *x) {
   u64 i,u=0;
@@ -53,12 +50,6 @@ static void ts64(u8 *x,u64 u) {
   int i;
   for (i = 7;i >= 0;--i) { x[i] = u; u >>= 8; }
 }
-
-static const u8 sigma[16] = "expand 32-byte k";
-
-static const u32 minusp[17] = {
-  5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 252
-} ;
 
 static void set25519(gf r, const gf a) {
   int i;
@@ -215,7 +206,7 @@ static int crypto_hashblocks(u8 *x,const u8 *m,u64 n) {
   return n;
 }
 
-static const u8 iv[64] = {
+__attribute__((aligned(1))) static const u8 iv[64] = {
     0x6a,0x09,0xe6,0x67,0xf3,0xbc,0xc9,0x08,
     0xbb,0x67,0xae,0x85,0x84,0xca,0xa7,0x3b,
     0x3c,0x6e,0xf3,0x72,0xfe,0x94,0xf8,0x2b,
@@ -253,7 +244,7 @@ static int crypto_hash(u8 *out,const u8 *m,u64 n) {
 
 static void add(gf p[4],gf q[4]) {
   gf a,b,c,d,t,e,f,g,h;
-  
+
   Z(a, p[1], p[0]);
   Z(t, q[1], q[0]);
   M(a, a, t);
@@ -283,7 +274,7 @@ static void cswap(gf p[4],gf q[4],u8 b) {
 
 static void pack(u8 *r,gf p[4]) {
   gf tx, ty, zi;
-  inv25519(zi, p[2]); 
+  inv25519(zi, p[2]);
   M(tx, p[0], zi);
   M(ty, p[1], zi);
   pack25519(r, ty);
@@ -471,9 +462,10 @@ static char *build_openssh_private_key_ed25519(
    char *p, char *pend, const u8 *public_key,
    const char *comment, u32 comment_size,
    const u8 *private_key, const u8 *checkstr) {
-  static const char c_begin[36] = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
-  static const char c_end[34] = "-----END OPENSSH PRIVATE KEY-----\n";
-  static const char c_pad7[7] = "\1\2\3\4\5\6\7";
+  __attribute__((aligned(1))) static const char c_begin[36] = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+  /* TODO(pts): Why is a \0 byte inserted between c_begin and c_end? */
+  __attribute__((aligned(1))) static const char c_end[34] = "-----END OPENSSH PRIVATE KEY-----\n";
+  __attribute__((aligned(1))) static const char c_pad7[7] = "\1\2\3\4\5\6\7";
   /* Buffer size needed in data: 236 + comment_size bytes. */
   char data[236 + MAX_COMMENT_SIZE], *origp, *dpend = data + sizeof data;
   u32 data_size;
@@ -504,23 +496,34 @@ static char *build_openssh_private_key_ed25519(
   return p;
 }
 
-int main(int argc, char **argv) {
+/* comment can be NULL. */
+static void generate_ed25519_keypair(const char *filename, const char *comment) {
   u8 rnd36[36], public_key[32];
   /* Buffer size needed: <= 400 + comment_size * 142 / 105 bytes. */
-  char buf[401 + MAX_COMMENT_SIZE + MAX_COMMENT_SIZE / 3 + MAX_COMMENT_SIZE * 2 / 105], *p, *pend = buf + sizeof buf;
-  static const char comment[1025] = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello,  World!";
-  u32 comment_size;  /* TODO(pts): Check for overflow */
-  static const char filename[] = "id_t1";
-  static const char filename_pub[] = "id_t1.pub";  /* !! */
-
-  (void)argc; (void)argv;
+  char buf[401 + MAX_COMMENT_SIZE + MAX_COMMENT_SIZE / 3 + MAX_COMMENT_SIZE * 2 / 105];
+  char *p, *pend = buf + sizeof buf;
+  char filename_pub[4096];
+  u32 comment_size, filename_size;  /* TODO(pts): Check for overflow */
+  filename_size = strlen(filename);
+  if (filename_size > sizeof(filename_pub) - 5) {
+    fatal("output-file too long");
+  }
+  memcpy(filename_pub, filename, filename_size);
+  memcpy(filename_pub + filename_size, ".pub", 5);
   comment_size = strlen(comment);
+  /* Subsequent checks would prevent the crash even without this check,
+   * but this check displays a more informative error message.
+   */
+  if (comment_size > MAX_COMMENT_SIZE) fatal("comment too long");
   if (memchr(comment, '\n', comment_size) ||
       memchr(comment, '\r', comment_size)) {
     fatal("comment contains newline");
   }
+
   generate_random_bytes(rnd36, 36);
-  memcpy(rnd36, "xyztxyztxyztxyztxyztxyztxyztxyztCKst", 36);  /* !! */
+#ifdef USE_DETERMINISTIC_OUTPUT
+  memcpy(rnd36, "xyztxyztxyztxyztxyztxyztxyztxyztCKst", 36);
+#endif
   keypair(public_key, rnd36);
   p = buf;
   p = build_openssh_public_key_ed25519(
@@ -531,5 +534,42 @@ int main(int argc, char **argv) {
       p, pend, public_key, comment, comment_size,
       rnd36 /* private_key */, rnd36 + 32 /* checkstr */);
   write_to_file(filename, 0600, buf, p - buf);
+}
+
+int main(int argc, char **argv) {
+  char **argi;
+  const char *filename = NULL;
+  const char *comment = "key";
+  const char *key_type = NULL;
+
+#ifdef __i386__
+  *(char*)(gf1) |= 1;  /* gcc-4.8.4 is not smart enough to optimize this. */
+#else
+  gf1[0] |= 1;
+#endif
+
+  (void)argc;
+  for (argi = argv + 1; *argi; ++argi) {
+    const char *arg = *argi;
+    if (0 == strcmp(arg, "--")) {
+      ++argi; break;
+    } else if (0 == strcmp(arg, "-") || *arg != '-') {
+      break;
+    } else if (0 == strcmp(arg, "-t")) {
+      key_type = *++argi;
+    } else if (0 == strcmp(arg, "-f")) {
+      filename = *++argi;
+    } else if (0 == strcmp(arg, "-C")) {
+      comment = *++argi;
+    } else {
+      fatal("unknown flag");
+    }
+  }
+  if (*argi) fatal("too many command-line arguments");
+  if (!key_type || 0 != strcmp(key_type, "ed25519")) {
+    fatal("missing: -t ed25519");
+  }
+  if (!filename) fatal("missing: -f <output-file>");
+  generate_ed25519_keypair(filename, comment);
   return 0;
 }
